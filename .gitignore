@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+
+# Large Datasets and Media Files
+*.mp4
+*.csv
+
+# Machine Learning Models (Optional to ignore, but usually good practice to avoid repo bloat)
+*.pkl
+*.pt
+*.task
