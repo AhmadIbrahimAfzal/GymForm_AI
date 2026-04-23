@@ -1,4 +1,4 @@
-import cv2
+﻿import cv2
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
@@ -7,7 +7,7 @@ import torch.nn as nn
 import warnings
 import numpy as np
 from collections import deque, Counter
-from exercises import BicepCurl, Squat
+from exercises import BicepCurl, Squat, LateralRaise
 import tkinter as tk
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -32,7 +32,7 @@ class GymModel(nn.Module):
         super(GymModel, self).__init__()
         self.network = nn.Sequential(
             nn.Linear(8, 64), nn.ReLU(), nn.Dropout(0.2),
-            nn.Linear(64, 32), nn.ReLU(), nn.Linear(32, 4)
+            nn.Linear(64, 32), nn.ReLU(), nn.Linear(32, 6)
         )
     def forward(self, x):
         return self.network(x)
@@ -50,7 +50,8 @@ detector = vision.PoseLandmarker.create_from_options(options)
 
 exercises_map = {
     "Bicep Curl": BicepCurl(),
-    "Squat": Squat()
+    "Squat": Squat(),
+    "Lateral Raise": LateralRaise()
 }
 
 selected_exercise = "Bicep Curl"
@@ -144,7 +145,7 @@ while cap.isOpened():
             class_idx = torch.argmax(probabilities).item()
             confidence = probabilities[class_idx].item() * 100
         
-        labels_map_reverse = {0: 'Bad Curl', 1: 'Good Curl', 2: 'Bad Squat', 3: 'Good Squat'}
+        labels_map_reverse = {0: 'Bad Curl', 1: 'Good Curl', 2: 'Bad Squat', 3: 'Good Squat', 4: 'Bad Raise', 5: 'Good Raise'}
         predicted_class = labels_map_reverse[class_idx]
         smoothed_class = get_smoothed_prediction(predicted_class)
 

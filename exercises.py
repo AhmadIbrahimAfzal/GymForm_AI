@@ -44,3 +44,21 @@ class Squat(Exercise):
                 self.rep_count += 1
                 
         return self.rep_count, self.stage
+
+
+class LateralRaise(Exercise):
+    def __init__(self):
+        super().__init__()
+        self.stage = "down"
+        
+    def update(self, angles, smoothed_class):
+        ls_ang = angles.get('l_shoulder', 0)
+        if ls_ang > 75:
+            self.stage = "up"
+            
+        if ls_ang < 30 and self.stage == "up":
+            self.stage = "down"
+            if 'Good' in smoothed_class:
+                self.rep_count += 1
+                
+        return self.rep_count, self.stage

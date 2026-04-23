@@ -6,7 +6,7 @@ import torch.optim as optim
 
 df = pd.read_csv('dataset_fullbody.csv')
 
-labels_map = {'Bad Curl': 0, 'Good Curl': 1, 'Bad Squat': 2, 'Good Squat': 3}
+labels_map = {'Bad Curl': 0, 'Good Curl': 1, 'Bad Squat': 2, 'Good Squat': 3, 'Bad Raise': 4, 'Good Raise': 5}
 df['label_encoded'] = df['label'].map(labels_map)
 df = df.sample(frac=1, random_state=42).reset_index(drop=True)
 
@@ -26,7 +26,7 @@ class GymModel(nn.Module):
             nn.Dropout(0.2),
             nn.Linear(64, 32),
             nn.ReLU(),
-            nn.Linear(32, 4)
+            nn.Linear(32, 6)
         )
     def forward(self, x):
         return self.network(x)

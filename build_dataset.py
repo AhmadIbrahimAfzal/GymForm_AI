@@ -90,5 +90,7 @@ process_video_to_csv('good_curl.mp4', 'Good Curl')
 process_video_to_csv('bad_curl.mp4', 'Bad Curl')
 process_video_to_csv('good_squat.mp4', 'Good Squat')
 process_video_to_csv('bad_squat.mp4', 'Bad Squat')
+process_video_to_csv('good_lat.mp4', 'Good Raise')
+process_video_to_csv('bad_lat.mp4', 'Bad Raise')
 
 print(f"Done! Saved to {csv_file}")
