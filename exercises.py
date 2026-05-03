@@ -20,7 +20,7 @@ class BicepCurl(Exercise):
             
         if le_ang < 50 and self.stage == "down": 
             self.stage = "up"
-            # Only count rep if form is good
+            # strict reps only
             if 'Good' in smoothed_class:
                 self.rep_count += 1
                 
