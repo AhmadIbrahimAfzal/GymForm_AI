@@ -133,6 +133,18 @@ while cap.isOpened():
             'r_knee': calculate_angle(r_hi, r_kn, r_an)
         }
 
+        # Ignore off-screen legs for upper body workouts
+        if current_exercise_name in ["Bicep Curl", "Lateral Raise"]:
+            angles_dict['l_hip'] = 180.0
+            angles_dict['r_hip'] = 180.0
+            angles_dict['l_knee'] = 180.0
+            angles_dict['r_knee'] = 180.0
+        elif current_exercise_name == "Squat":
+            angles_dict['l_elbow'] = 180.0
+            angles_dict['r_elbow'] = 180.0
+            angles_dict['l_shoulder'] = 180.0
+            angles_dict['r_shoulder'] = 180.0
+
         X_live_tensor = torch.FloatTensor([[
             angles_dict['l_elbow'], angles_dict['r_elbow'], angles_dict['l_shoulder'], 
             angles_dict['r_shoulder'], angles_dict['l_hip'], angles_dict['r_hip'], 
@@ -196,6 +208,14 @@ while cap.isOpened():
         for connection in POSE_CONNECTIONS:
             start_idx, end_idx = connection
             if start_idx < len(filtered_landmarks) and end_idx < len(filtered_landmarks):
+                # Hide irrelevant lines based on exercise
+                if current_exercise_name in ["Bicep Curl", "Lateral Raise"]:
+                    if start_idx >= 24 or end_idx >= 24: # Hide lower body
+                        continue
+                elif current_exercise_name == "Squat":
+                    if (13 <= start_idx <= 22) or (13 <= end_idx <= 22): # Hide arms
+                        continue
+
                 start_point = (int(filtered_landmarks[start_idx][0] * frame.shape[1]), 
                                int(filtered_landmarks[start_idx][1] * frame.shape[0]))
                 end_point = (int(filtered_landmarks[end_idx][0] * frame.shape[1]), 
@@ -209,6 +229,12 @@ while cap.isOpened():
                 cv2.line(frame, start_point, end_point, line_color, thickness, cv2.LINE_AA)
 
         for i, flm in enumerate(filtered_landmarks):
+            # Hide irrelevant joints based on exercise
+            if current_exercise_name in ["Bicep Curl", "Lateral Raise"] and i >= 24:
+                continue
+            elif current_exercise_name == "Squat" and (13 <= i <= 22):
+                continue
+                
             x = int(flm[0] * frame.shape[1])
             y = int(flm[1] * frame.shape[0])
             
