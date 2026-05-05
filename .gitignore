@@ -1,8 +1,3 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-
 # Environments
 .env
 .venv
@@ -19,9 +14,3 @@ venv.bak/
 
 # Large Datasets and Media Files
 *.mp4
-*.csv
-
-# Machine Learning Models (Optional to ignore, but usually good practice to avoid repo bloat)
-*.pkl
-*.pt
-*.task
