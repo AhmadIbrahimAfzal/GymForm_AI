@@ -1,0 +1,385 @@
+import streamlit as st
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, WebRtcMode
+import av
+import cv2
+import mediapipe as mp
+from mediapipe.tasks import python as mp_python
+from mediapipe.tasks.python import vision
+import torch
+import torch.nn as nn
+import numpy as np
+from collections import deque, Counter
+import warnings
+import threading
+import time
+from exercises import BicepCurl, Squat, LateralRaise
+
+warnings.filterwarnings("ignore", category=UserWarning)
+
+st.set_page_config(
+    page_title="GymForm AI — Smart Workout Coach",
+    page_icon="🏋️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+.stApp { font-family: 'Inter', sans-serif; }
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+    border-right: 1px solid rgba(57,255,20,0.2);
+}
+.main-header { text-align:center; padding:1.2rem 0;
+    background: linear-gradient(135deg, rgba(57,255,20,0.1), rgba(0,210,255,0.1));
+    border-radius:16px; border:1px solid rgba(57,255,20,0.2); margin-bottom:1.5rem; }
+.main-header h1 {
+    background: linear-gradient(135deg,#39FF14,#00D2FF);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    font-size:2.4rem; font-weight:800; margin:0; }
+.main-header p { color:rgba(255,255,255,0.55); font-size:0.95rem; margin-top:0.2rem; }
+.stat-card {
+    background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+    border:1px solid rgba(57,255,20,0.3); border-radius:12px;
+    padding:1rem; text-align:center; margin-bottom:0.6rem;
+    backdrop-filter:blur(10px); transition:all .3s ease; }
+.stat-card:hover { border-color:rgba(57,255,20,0.6); box-shadow:0 0 20px rgba(57,255,20,0.1); }
+.stat-label { color:rgba(255,255,255,0.45); font-size:0.7rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:1.5px; margin-bottom:0.2rem; }
+.stat-value { font-size:1.9rem; font-weight:800;
+    background:linear-gradient(135deg,#39FF14,#00D2FF);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.stat-value.good { background:linear-gradient(135deg,#39FF14,#00FF88);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.stat-value.bad { background:linear-gradient(135deg,#FF4444,#FF6B6B);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.stat-value.neutral { background:linear-gradient(135deg,#FFD700,#FFA500);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.sidebar-title { text-align:center; padding:1rem 0 1.2rem;
+    border-bottom:1px solid rgba(57,255,20,0.2); margin-bottom:1.2rem; }
+.sidebar-title h2 {
+    background:linear-gradient(135deg,#39FF14,#00D2FF);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    font-size:1.4rem; font-weight:800; margin:0; }
+.sidebar-title p { color:rgba(255,255,255,0.4); font-size:0.75rem; margin-top:0.2rem; }
+.section-hdr { color:rgba(255,255,255,0.4); font-size:0.68rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:2px; margin:1.2rem 0 0.6rem;
+    padding-bottom:0.4rem; border-bottom:1px solid rgba(255,255,255,0.1); }
+.tip-card { background:linear-gradient(135deg,rgba(57,255,20,0.08),rgba(0,210,255,0.05));
+    border:1px solid rgba(57,255,20,0.15); border-radius:12px;
+    padding:0.9rem 1.1rem; margin:0.4rem 0; }
+.tip-card h4 { color:#39FF14; margin:0 0 0.2rem; font-size:0.85rem; }
+.tip-card p { color:rgba(255,255,255,0.6); margin:0; font-size:0.82rem; line-height:1.4; }
+@keyframes pulse {
+    0%{box-shadow:0 0 0 0 rgba(57,255,20,0.4)}
+    70%{box-shadow:0 0 0 10px rgba(57,255,20,0)}
+    100%{box-shadow:0 0 0 0 rgba(57,255,20,0)} }
+.pulse-dot { display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:#39FF14; animation:pulse 2s infinite; margin-right:6px; }
+#MainMenu {visibility:hidden;} footer {visibility:hidden;}
+</style>
+""", unsafe_allow_html=True)
+
+POSE_CONNECTIONS = [
+    (0,1),(1,2),(2,3),(3,7),(0,4),(4,5),(5,6),(6,8),(9,10),
+    (11,12),(11,13),(13,15),(15,17),(15,19),(15,21),(17,19),
+    (12,14),(14,16),(16,18),(16,20),(16,22),(18,20),
+    (11,23),(12,24),(23,24),
+    (23,25),(24,26),(25,27),(26,28),(27,29),(28,30),
+    (29,31),(30,32),(27,31),(28,32),
+]
+LABELS_MAP_REVERSE = {
+    0:'Bad Curl',1:'Good Curl',2:'Bad Squat',3:'Good Squat',4:'Bad Raise',5:'Good Raise'
+}
+EXERCISES_MAP = {"Bicep Curl": BicepCurl, "Squat": Squat, "Lateral Raise": LateralRaise}
+
+def calculate_angle(a, b, c):
+    a, b, c = np.array(a), np.array(b), np.array(c)
+    radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - np.arctan2(a[1]-b[1], a[0]-b[0])
+    angle = np.abs(radians * 180.0 / np.pi)
+    return 360 - angle if angle > 180 else angle
+
+class GymModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.network = nn.Sequential(
+            nn.Linear(8, 64), nn.ReLU(), nn.Dropout(0.2),
+            nn.Linear(64, 32), nn.ReLU(), nn.Linear(32, 6),
+        )
+    def forward(self, x):
+        return self.network(x)
+
+@st.cache_resource
+def load_model():
+    m = GymModel()
+    m.load_state_dict(torch.load('gym_model_fullbody.pt', weights_only=True))
+    m.eval()
+    return m
+
+class GymCoachProcessor(VideoProcessorBase):
+    def __init__(self):
+        self._exercise_name = "Bicep Curl"
+        self._active_exercise = BicepCurl()
+        self.filtered_landmarks = []
+        self.prediction_history = deque(maxlen=10)
+        self.lock = threading.Lock()
+        self.EMA_ALPHA = 0.5
+        self.rep_count = 0
+        self.stage = "down"
+        self.form_text = "Waiting..."
+        self.confidence = 0.0
+        self.model = load_model()
+        base_opts = mp_python.BaseOptions(model_asset_path='pose_landmarker_lite.task')
+        opts = vision.PoseLandmarkerOptions(
+            base_options=base_opts,
+            running_mode=vision.RunningMode.IMAGE,
+            output_segmentation_masks=False,
+        )
+        self.detector = vision.PoseLandmarker.create_from_options(opts)
+
+    @property
+    def exercise_name(self):
+        return self._exercise_name
+
+    @exercise_name.setter
+    def exercise_name(self, value):
+        if value != self._exercise_name:
+            with self.lock:
+                self._exercise_name = value
+                self._active_exercise = EXERCISES_MAP[value]()
+                self.rep_count = 0
+                self.stage = "down"
+                self.form_text = "Waiting..."
+                self.confidence = 0.0
+                self.prediction_history.clear()
+                self.filtered_landmarks = []
+
+    def _smoothed(self, pred):
+        self.prediction_history.append(pred)
+        return Counter(self.prediction_history).most_common(1)[0][0]
+
+    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+        img = frame.to_ndarray(format="bgr24")
+        with self.lock:
+            ex_name = self._exercise_name
+            ex_obj  = self._active_exercise
+
+        rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        try:
+            result = self.detector.detect(mp_img)
+        except Exception:
+            return av.VideoFrame.from_ndarray(img, format="bgr24")
+
+        if not result.pose_landmarks:
+            return av.VideoFrame.from_ndarray(img, format="bgr24")
+
+        lms = result.pose_landmarks[0]
+        if not self.filtered_landmarks:
+            self.filtered_landmarks = [[lm.x, lm.y, lm.z] for lm in lms]
+        else:
+            a = self.EMA_ALPHA
+            for i, lm in enumerate(lms):
+                self.filtered_landmarks[i][0] = a*lm.x + (1-a)*self.filtered_landmarks[i][0]
+                self.filtered_landmarks[i][1] = a*lm.y + (1-a)*self.filtered_landmarks[i][1]
+                self.filtered_landmarks[i][2] = a*lm.z + (1-a)*self.filtered_landmarks[i][2]
+
+        fl = self.filtered_landmarks
+        l_sh, l_el, l_wr = fl[11][:2], fl[13][:2], fl[15][:2]
+        l_hi, l_kn, l_an = fl[23][:2], fl[25][:2], fl[27][:2]
+        r_sh, r_el, r_wr = fl[12][:2], fl[14][:2], fl[16][:2]
+        r_hi, r_kn, r_an = fl[24][:2], fl[26][:2], fl[28][:2]
+
+        ang = {
+            'l_elbow':    calculate_angle(l_sh, l_el, l_wr),
+            'r_elbow':    calculate_angle(r_sh, r_el, r_wr),
+            'l_shoulder': calculate_angle(l_hi, l_sh, l_el),
+            'r_shoulder': calculate_angle(r_hi, r_sh, r_el),
+            'l_hip':      calculate_angle(l_sh, l_hi, l_kn),
+            'r_hip':      calculate_angle(r_sh, r_hi, r_kn),
+            'l_knee':     calculate_angle(l_hi, l_kn, l_an),
+            'r_knee':     calculate_angle(r_hi, r_kn, r_an),
+        }
+
+        if ex_name in ("Bicep Curl", "Lateral Raise"):
+            ang['l_hip'] = ang['r_hip'] = ang['l_knee'] = ang['r_knee'] = 180.0
+        elif ex_name == "Squat":
+            ang['l_elbow'] = ang['r_elbow'] = ang['l_shoulder'] = ang['r_shoulder'] = 180.0
+
+        tensor = torch.FloatTensor([[
+            ang['l_elbow'], ang['r_elbow'], ang['l_shoulder'], ang['r_shoulder'],
+            ang['l_hip'], ang['r_hip'], ang['l_knee'], ang['r_knee'],
+        ]])
+        with torch.no_grad():
+            out = self.model(tensor)
+            probs = torch.softmax(out, dim=1)[0]
+            idx = torch.argmax(probs).item()
+            conf = probs[idx].item() * 100
+
+        predicted = LABELS_MAP_REVERSE[idx]
+        smoothed  = self._smoothed(predicted)
+        reps, stage = ex_obj.update(ang, smoothed)
+
+        self.rep_count  = reps
+        self.stage      = stage
+        self.confidence = conf
+
+        bad = set()
+        if conf < 60:
+            smoothed = "Tracking..."
+            txt_c = (0, 255, 255); base_c = (0, 255, 255)
+        elif 'Good' in smoothed:
+            txt_c = (0, 255, 0); base_c = (0, 255, 0)
+        else:
+            txt_c = (0, 0, 255); base_c = (0, 255, 0)
+            if ex_name == "Bicep Curl":
+                if ang['l_shoulder'] > 25 or ang['r_shoulder'] > 25:
+                    bad.update([(11,13),(12,14),(11,23),(12,24)])
+                else:
+                    bad.update([(11,13),(13,15),(12,14),(14,16)])
+            elif ex_name == "Squat":
+                if ang['l_hip'] < 70 or ang['r_hip'] < 70:
+                    bad.update([(11,23),(12,24),(23,24)])
+                elif stage == "down" and (ang['l_knee'] > 120 or ang['r_knee'] > 120):
+                    bad.update([(23,25),(25,27),(24,26),(26,28)])
+                else:
+                    bad.update([(23,25),(25,27),(24,26),(26,28)])
+            elif ex_name == "Lateral Raise":
+                if ang['l_elbow'] < 140 or ang['r_elbow'] < 140:
+                    bad.update([(11,13),(13,15),(12,14),(14,16)])
+                elif ang['l_shoulder'] > 100 or ang['r_shoulder'] > 100:
+                    bad.update([(11,13),(12,14),(11,12)])
+                else:
+                    bad.update([(11,13),(13,15),(12,14),(14,16)])
+
+        self.form_text = smoothed
+
+        ov = img.copy()
+        cv2.rectangle(ov, (0, 0), (550, 140), (0, 0, 0), -1)
+        cv2.addWeighted(ov, 0.65, img, 0.35, 0, img)
+        cv2.putText(img, f"EXERCISE: {ex_name}", (10,35),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,255), 2, cv2.LINE_AA)
+        cv2.putText(img, f"REPS: {reps}   STAGE: {stage.upper()}", (10,75),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255,255,255), 2, cv2.LINE_AA)
+        cv2.putText(img, f"FORM: {smoothed} ({conf:.1f}%)", (10,115),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, txt_c, 2, cv2.LINE_AA)
+
+        h, w = img.shape[:2]
+        for s, e in POSE_CONNECTIONS:
+            if s >= len(fl) or e >= len(fl):
+                continue
+            if ex_name in ("Bicep Curl", "Lateral Raise") and (s >= 24 or e >= 24):
+                continue
+            if ex_name == "Squat" and (13 <= s <= 22 or 13 <= e <= 22):
+                continue
+            p1 = (int(fl[s][0]*w), int(fl[s][1]*h))
+            p2 = (int(fl[e][0]*w), int(fl[e][1]*h))
+            is_bad = (s, e) in bad or (e, s) in bad
+            cv2.line(img, p1, p2, (0,0,255) if is_bad else base_c,
+                     6 if is_bad else 3, cv2.LINE_AA)
+
+        for i, pt in enumerate(fl):
+            if ex_name in ("Bicep Curl", "Lateral Raise") and i >= 24:
+                continue
+            if ex_name == "Squat" and 13 <= i <= 22:
+                continue
+            jbad = any(c[0]==i or c[1]==i for c in bad)
+            cv2.circle(img, (int(pt[0]*w), int(pt[1]*h)), 5,
+                       (0,0,255) if jbad else (255,255,255), -1)
+
+        return av.VideoFrame.from_ndarray(img, format="bgr24")
+
+
+with st.sidebar:
+    st.markdown("""
+    <div class="sidebar-title">
+        <h2>🏋️ GymForm AI</h2>
+        <p>AI-Powered Workout Coach</p>
+    </div>""", unsafe_allow_html=True)
+
+    st.markdown('<div class="section-hdr">Exercise</div>', unsafe_allow_html=True)
+    selected_exercise = st.radio(
+        "Choose your workout",
+        list(EXERCISES_MAP.keys()),
+        index=0,
+        label_visibility="collapsed",
+    )
+
+    st.markdown('<div class="section-hdr">Live Stats</div>', unsafe_allow_html=True)
+    reps_ph   = st.empty()
+    stage_ph  = st.empty()
+    form_ph   = st.empty()
+
+    st.markdown("---")
+    st.markdown("""
+    <div class="tip-card">
+        <h4>💡 Quick Tips</h4>
+        <p>• Stand 5–8 ft from your camera<br>
+           • Ensure good lighting<br>
+           • Press <b>START</b> to begin<br>
+           • Only <b>good-form</b> reps are counted</p>
+    </div>""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="main-header">
+    <h1>GymForm AI</h1>
+    <p>Real-time exercise form analysis powered by MediaPipe &amp; PyTorch</p>
+</div>""", unsafe_allow_html=True)
+
+ctx = webrtc_streamer(
+    key="gym-coach",
+    mode=WebRtcMode.SENDRECV,
+    video_processor_factory=GymCoachProcessor,
+    media_stream_constraints={"video": True, "audio": False},
+    async_processing=True,
+    rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+)
+
+if ctx.video_processor:
+    ctx.video_processor.exercise_name = selected_exercise
+
+    while ctx.state.playing:
+        p = ctx.video_processor
+        reps_ph.markdown(
+            f'<div class="stat-card"><div class="stat-label">Reps</div>'
+            f'<div class="stat-value">{p.rep_count}</div></div>',
+            unsafe_allow_html=True,
+        )
+        stage_ph.markdown(
+            f'<div class="stat-card"><div class="stat-label">Stage</div>'
+            f'<div class="stat-value">{p.stage.upper()}</div></div>',
+            unsafe_allow_html=True,
+        )
+        cls = "good" if "Good" in p.form_text else ("bad" if "Bad" in p.form_text else "neutral")
+        form_ph.markdown(
+            f'<div class="stat-card"><div class="stat-label">Form</div>'
+            f'<div class="stat-value {cls}">{p.form_text}</div>'
+            f'<div class="stat-label" style="margin-top:4px">{p.confidence:.1f}% confidence</div></div>',
+            unsafe_allow_html=True,
+        )
+        time.sleep(0.2)
+
+st.markdown("---")
+c1, c2, c3 = st.columns(3)
+with c1:
+    st.markdown("""
+    <div class="tip-card">
+        <h4>💪 Bicep Curl</h4>
+        <p>Keep elbows pinned to your sides. Curl the weight up with control and lower slowly.
+        Avoid swinging your body.</p>
+    </div>""", unsafe_allow_html=True)
+with c2:
+    st.markdown("""
+    <div class="tip-card">
+        <h4>🦵 Squat</h4>
+        <p>Feet shoulder-width apart. Push hips back and lower until thighs are parallel.
+        Keep your chest up and knees over toes.</p>
+    </div>""", unsafe_allow_html=True)
+with c3:
+    st.markdown("""
+    <div class="tip-card">
+        <h4>🤸 Lateral Raise</h4>
+        <p>Raise arms out to the sides to shoulder height. Keep a slight bend in the elbows.
+        Lower under control — don't swing.</p>
+    </div>""", unsafe_allow_html=True)
