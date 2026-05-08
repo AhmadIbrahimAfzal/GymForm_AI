@@ -31,23 +31,21 @@ st.markdown("""
     background: linear-gradient(180deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
     border-right: 1px solid rgba(57,255,20,0.2);
 }
-.main-header { text-align:center; padding:1.2rem 0;
-    background: linear-gradient(135deg, rgba(57,255,20,0.1), rgba(0,210,255,0.1));
-    border-radius:16px; border:1px solid rgba(57,255,20,0.2); margin-bottom:1.5rem; }
+.main-header { text-align:center; padding:0.3rem 0; margin-bottom:0.5rem; }
 .main-header h1 {
     background: linear-gradient(135deg,#39FF14,#00D2FF);
     -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-    font-size:2.4rem; font-weight:800; margin:0; }
-.main-header p { color:rgba(255,255,255,0.55); font-size:0.95rem; margin-top:0.2rem; }
+    font-size:2rem; font-weight:800; margin:0; }
 .stat-card {
     background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
-    border:1px solid rgba(57,255,20,0.3); border-radius:12px;
-    padding:1rem; text-align:center; margin-bottom:0.6rem;
-    backdrop-filter:blur(10px); transition:all .3s ease; }
+    border:1px solid rgba(57,255,20,0.3); border-radius:10px;
+    padding:0.5rem 0.8rem; text-align:center; margin-bottom:0.4rem;
+    backdrop-filter:blur(10px); transition:all .3s ease;
+    min-height:70px; display:flex; flex-direction:column; justify-content:center; }
 .stat-card:hover { border-color:rgba(57,255,20,0.6); box-shadow:0 0 20px rgba(57,255,20,0.1); }
-.stat-label { color:rgba(255,255,255,0.45); font-size:0.7rem; font-weight:700;
-    text-transform:uppercase; letter-spacing:1.5px; margin-bottom:0.2rem; }
-.stat-value { font-size:1.9rem; font-weight:800;
+.stat-label { color:rgba(255,255,255,0.45); font-size:0.6rem; font-weight:700;
+    text-transform:uppercase; letter-spacing:1.5px; margin-bottom:0.1rem; }
+.stat-value { font-size:1.3rem; font-weight:800;
     background:linear-gradient(135deg,#39FF14,#00D2FF);
     -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
 .stat-value.good { background:linear-gradient(135deg,#39FF14,#00FF88);
@@ -56,28 +54,17 @@ st.markdown("""
     -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
 .stat-value.neutral { background:linear-gradient(135deg,#FFD700,#FFA500);
     -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
-.sidebar-title { text-align:center; padding:1rem 0 1.2rem;
-    border-bottom:1px solid rgba(57,255,20,0.2); margin-bottom:1.2rem; }
-.sidebar-title h2 {
-    background:linear-gradient(135deg,#39FF14,#00D2FF);
-    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-    font-size:1.4rem; font-weight:800; margin:0; }
-.sidebar-title p { color:rgba(255,255,255,0.4); font-size:0.75rem; margin-top:0.2rem; }
 .section-hdr { color:rgba(255,255,255,0.4); font-size:0.68rem; font-weight:700;
     text-transform:uppercase; letter-spacing:2px; margin:1.2rem 0 0.6rem;
     padding-bottom:0.4rem; border-bottom:1px solid rgba(255,255,255,0.1); }
-.tip-card { background:linear-gradient(135deg,rgba(57,255,20,0.08),rgba(0,210,255,0.05));
-    border:1px solid rgba(57,255,20,0.15); border-radius:12px;
-    padding:0.9rem 1.1rem; margin:0.4rem 0; }
-.tip-card h4 { color:#39FF14; margin:0 0 0.2rem; font-size:0.85rem; }
-.tip-card p { color:rgba(255,255,255,0.6); margin:0; font-size:0.82rem; line-height:1.4; }
-@keyframes pulse {
-    0%{box-shadow:0 0 0 0 rgba(57,255,20,0.4)}
-    70%{box-shadow:0 0 0 10px rgba(57,255,20,0)}
-    100%{box-shadow:0 0 0 0 rgba(57,255,20,0)} }
-.pulse-dot { display:inline-block; width:8px; height:8px; border-radius:50%;
-    background:#39FF14; animation:pulse 2s infinite; margin-right:6px; }
+[data-testid="stAppViewBlockContainer"] { padding-top:0.2rem !important; padding-bottom:0 !important; }
+.block-container { padding-top:0.2rem !important; padding-bottom:0 !important; }
+[data-testid="column"] .stMarkdown { margin-bottom:0 !important; }
+video { max-height:350px !important; object-fit:contain; }
 #MainMenu {visibility:hidden;} footer {visibility:hidden;}
+header {visibility:hidden;}
+[data-testid="stStatusWidget"] {display:none;}
+[data-testid="stBottom"] {display:none;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -258,7 +245,7 @@ class GymCoachProcessor(VideoProcessorBase):
         ov = img.copy()
         cv2.rectangle(ov, (0, 0), (550, 140), (0, 0, 0), -1)
         cv2.addWeighted(ov, 0.65, img, 0.35, 0, img)
-        cv2.putText(img, f"EXERCISE: {ex_name}", (10,35),
+        cv2.putText(img, f"EXERCISES: {ex_name}", (10,35),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,255), 2, cv2.LINE_AA)
         cv2.putText(img, f"REPS: {reps}   STAGE: {stage.upper()}", (10,75),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255,255,255), 2, cv2.LINE_AA)
@@ -292,12 +279,6 @@ class GymCoachProcessor(VideoProcessorBase):
 
 
 with st.sidebar:
-    st.markdown("""
-    <div class="sidebar-title">
-        <h2>🏋️ GymForm AI</h2>
-        <p>AI-Powered Workout Coach</p>
-    </div>""", unsafe_allow_html=True)
-
     st.markdown('<div class="section-hdr">Exercise</div>', unsafe_allow_html=True)
     selected_exercise = st.radio(
         "Choose your workout",
@@ -306,35 +287,26 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
-    st.markdown('<div class="section-hdr">Live Stats</div>', unsafe_allow_html=True)
-    reps_ph   = st.empty()
-    stage_ph  = st.empty()
-    form_ph   = st.empty()
-
-    st.markdown("---")
-    st.markdown("""
-    <div class="tip-card">
-        <h4>💡 Quick Tips</h4>
-        <p>• Stand 5–8 ft from your camera<br>
-           • Ensure good lighting<br>
-           • Press <b>START</b> to begin<br>
-           • Only <b>good-form</b> reps are counted</p>
-    </div>""", unsafe_allow_html=True)
-
 st.markdown("""
 <div class="main-header">
     <h1>GymForm AI</h1>
-    <p>Real-time exercise form analysis powered by MediaPipe &amp; PyTorch</p>
 </div>""", unsafe_allow_html=True)
 
-ctx = webrtc_streamer(
-    key="gym-coach",
-    mode=WebRtcMode.SENDRECV,
-    video_processor_factory=GymCoachProcessor,
-    media_stream_constraints={"video": True, "audio": False},
-    async_processing=True,
-    rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-)
+_, vid_col, _ = st.columns([1, 2, 1])
+with vid_col:
+    ctx = webrtc_streamer(
+        key="gym-coach",
+        mode=WebRtcMode.SENDRECV,
+        video_processor_factory=GymCoachProcessor,
+        media_stream_constraints={"video": {"width": {"ideal": 480}, "height": {"ideal": 360}}, "audio": False},
+        async_processing=True,
+        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+    )
+
+stats_cols = st.columns(3)
+reps_ph  = stats_cols[0].empty()
+stage_ph = stats_cols[1].empty()
+form_ph  = stats_cols[2].empty()
 
 if ctx.video_processor:
     ctx.video_processor.exercise_name = selected_exercise
@@ -354,32 +326,7 @@ if ctx.video_processor:
         cls = "good" if "Good" in p.form_text else ("bad" if "Bad" in p.form_text else "neutral")
         form_ph.markdown(
             f'<div class="stat-card"><div class="stat-label">Form</div>'
-            f'<div class="stat-value {cls}">{p.form_text}</div>'
-            f'<div class="stat-label" style="margin-top:4px">{p.confidence:.1f}% confidence</div></div>',
+            f'<div class="stat-value {cls}">{p.form_text} ({p.confidence:.0f}%)</div></div>',
             unsafe_allow_html=True,
         )
         time.sleep(0.2)
-
-st.markdown("---")
-c1, c2, c3 = st.columns(3)
-with c1:
-    st.markdown("""
-    <div class="tip-card">
-        <h4>💪 Bicep Curl</h4>
-        <p>Keep elbows pinned to your sides. Curl the weight up with control and lower slowly.
-        Avoid swinging your body.</p>
-    </div>""", unsafe_allow_html=True)
-with c2:
-    st.markdown("""
-    <div class="tip-card">
-        <h4>🦵 Squat</h4>
-        <p>Feet shoulder-width apart. Push hips back and lower until thighs are parallel.
-        Keep your chest up and knees over toes.</p>
-    </div>""", unsafe_allow_html=True)
-with c3:
-    st.markdown("""
-    <div class="tip-card">
-        <h4>🤸 Lateral Raise</h4>
-        <p>Raise arms out to the sides to shoulder height. Keep a slight bend in the elbows.
-        Lower under control — don't swing.</p>
-    </div>""", unsafe_allow_html=True)
