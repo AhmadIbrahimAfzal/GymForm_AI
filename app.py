@@ -12,7 +12,7 @@ from collections import deque, Counter
 import warnings
 import threading
 import time
-from exercises import BicepCurl, Squat, LateralRaise
+from exercises import BicepCurl, Squat, LateralRaise, ShoulderPress, TricepFinisher
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -77,9 +77,10 @@ POSE_CONNECTIONS = [
     (29,31),(30,32),(27,31),(28,32),
 ]
 LABELS_MAP_REVERSE = {
-    0:'Bad Curl',1:'Good Curl',2:'Bad Squat',3:'Good Squat',4:'Bad Raise',5:'Good Raise'
+    0:'Bad Curl',1:'Good Curl',2:'Bad Squat',3:'Good Squat',4:'Bad Raise',5:'Good Raise',
+    6:'Bad Shoulder',7:'Good Shoulder',8:'Bad Tricep',9:'Good Tricep'
 }
-EXERCISES_MAP = {"Bicep Curl": BicepCurl, "Squat": Squat, "Lateral Raise": LateralRaise}
+EXERCISES_MAP = {"Bicep Curl": BicepCurl, "Squat": Squat, "Lateral Raise": LateralRaise, "Shoulder Press": ShoulderPress, "Tricep Finisher": TricepFinisher}
 
 def calculate_angle(a, b, c):
     a, b, c = np.array(a), np.array(b), np.array(c)
@@ -92,7 +93,7 @@ class GymModel(nn.Module):
         super().__init__()
         self.network = nn.Sequential(
             nn.Linear(8, 64), nn.ReLU(), nn.Dropout(0.2),
-            nn.Linear(64, 32), nn.ReLU(), nn.Linear(32, 6),
+            nn.Linear(64, 32), nn.ReLU(), nn.Linear(32, 10),
         )
     def forward(self, x):
         return self.network(x)
@@ -189,7 +190,12 @@ class GymCoachProcessor(VideoProcessorBase):
             'r_knee':     calculate_angle(r_hi, r_kn, r_an),
         }
 
-        if ex_name in ("Bicep Curl", "Lateral Raise"):
+        # Track active arm based on elbow visibility
+        l_el_vis = lms[13].visibility if len(lms) > 13 else 0
+        r_el_vis = lms[14].visibility if len(lms) > 14 else 0
+        ang['active_arm'] = 'left' if l_el_vis > r_el_vis else 'right'
+
+        if ex_name in ("Bicep Curl", "Lateral Raise", "Shoulder Press", "Tricep Finisher"):
             ang['l_hip'] = ang['r_hip'] = ang['l_knee'] = ang['r_knee'] = 180.0
         elif ex_name == "Squat":
             ang['l_elbow'] = ang['r_elbow'] = ang['l_shoulder'] = ang['r_shoulder'] = 180.0
@@ -200,6 +206,22 @@ class GymCoachProcessor(VideoProcessorBase):
         ]])
         with torch.no_grad():
             out = self.model(tensor)
+            
+            # Mask out irrelevant exercises so it never predicts them
+            if ex_name == "Bicep Curl":
+                out[0, 2:] = -float('inf')
+            elif ex_name == "Squat":
+                out[0, :2] = -float('inf')
+                out[0, 4:] = -float('inf')
+            elif ex_name == "Lateral Raise":
+                out[0, :4] = -float('inf')
+                out[0, 6:] = -float('inf')
+            elif ex_name == "Shoulder Press":
+                out[0, :6] = -float('inf')
+                out[0, 8:] = -float('inf')
+            elif ex_name == "Tricep Finisher":
+                out[0, :8] = -float('inf')
+                
             probs = torch.softmax(out, dim=1)[0]
             idx = torch.argmax(probs).item()
             conf = probs[idx].item() * 100
@@ -221,7 +243,7 @@ class GymCoachProcessor(VideoProcessorBase):
         else:
             txt_c = (0, 0, 255); base_c = (0, 255, 0)
             if ex_name == "Bicep Curl":
-                if ang['l_shoulder'] > 25 or ang['r_shoulder'] > 25:
+                if ang['l_shoulder'] > 40 or ang['r_shoulder'] > 40:
                     bad.update([(11,13),(12,14),(11,23),(12,24)])
                 else:
                     bad.update([(11,13),(13,15),(12,14),(14,16)])
@@ -239,24 +261,28 @@ class GymCoachProcessor(VideoProcessorBase):
                     bad.update([(11,13),(12,14),(11,12)])
                 else:
                     bad.update([(11,13),(13,15),(12,14),(14,16)])
+            elif ex_name == "Shoulder Press":
+                if ang['l_hip'] < 160 or ang['r_hip'] < 160:
+                    bad.update([(11,23),(12,24),(23,24)])
+                else:
+                    bad.update([(11,13),(13,15),(12,14),(14,16)])
+            elif ex_name == "Tricep Finisher":
+                if ang['l_shoulder'] > 45 and ang['r_shoulder'] > 45:
+                    bad.update([(11,13),(12,14)])
+                else:
+                    bad.update([(11,13),(13,15),(12,14),(14,16)])
 
         self.form_text = smoothed
 
-        ov = img.copy()
-        cv2.rectangle(ov, (0, 0), (550, 140), (0, 0, 0), -1)
-        cv2.addWeighted(ov, 0.65, img, 0.35, 0, img)
-        cv2.putText(img, f"EXERCISES: {ex_name}", (10,35),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,255), 2, cv2.LINE_AA)
-        cv2.putText(img, f"REPS: {reps}   STAGE: {stage.upper()}", (10,75),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255,255,255), 2, cv2.LINE_AA)
-        cv2.putText(img, f"FORM: {smoothed} ({conf:.1f}%)", (10,115),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, txt_c, 2, cv2.LINE_AA)
+
 
         h, w = img.shape[:2]
         for s, e in POSE_CONNECTIONS:
             if s >= len(fl) or e >= len(fl):
                 continue
-            if ex_name in ("Bicep Curl", "Lateral Raise") and (s >= 24 or e >= 24):
+            if s <= 10 or e <= 10:
+                continue
+            if ex_name in ("Bicep Curl", "Lateral Raise", "Shoulder Press", "Tricep Finisher") and (s >= 25 or e >= 25):
                 continue
             if ex_name == "Squat" and (13 <= s <= 22 or 13 <= e <= 22):
                 continue
@@ -267,7 +293,9 @@ class GymCoachProcessor(VideoProcessorBase):
                      6 if is_bad else 3, cv2.LINE_AA)
 
         for i, pt in enumerate(fl):
-            if ex_name in ("Bicep Curl", "Lateral Raise") and i >= 24:
+            if i <= 10:
+                continue
+            if ex_name in ("Bicep Curl", "Lateral Raise", "Shoulder Press", "Tricep Finisher") and i >= 25:
                 continue
             if ex_name == "Squat" and 13 <= i <= 22:
                 continue
@@ -312,7 +340,7 @@ if ctx.video_processor:
     ctx.video_processor.exercise_name = selected_exercise
 
     while ctx.state.playing:
-        p = ctx.video_processor
+        p = ctx.video_processor 
         reps_ph.markdown(
             f'<div class="stat-card"><div class="stat-label">Reps</div>'
             f'<div class="stat-value">{p.rep_count}</div></div>',
