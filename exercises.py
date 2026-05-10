@@ -17,18 +17,16 @@ class BicepCurl(Exercise):
         le_ang = angles.get('l_elbow', 180)
         re_ang = angles.get('r_elbow', 180)
         
-        # Track form throughout the movement
         if 'Bad' in smoothed_class:
             self.form_was_bad = True
             
         if le_ang > 120 and re_ang > 120: 
             self.stage = "down"
-            self.form_was_bad = False # Reset flag when resting at the bottom
+            self.form_was_bad = False
             
         if le_ang < 90 and re_ang < 90 and self.stage == "down": 
             self.stage = "up"
-            # strict reps only, ensuring form was good the whole way up
-            if not self.form_was_bad and 'Good' in smoothed_class:
+            if not self.form_was_bad and 'Good' in smoothed_class: # strict reps
                 self.rep_count += 1
                 
         return self.rep_count, self.stage
@@ -48,7 +46,7 @@ class Squat(Exercise):
             
         if lk_ang > 140 and rk_ang > 140:
             self.stage = "up"
-            self.form_was_bad = False # Reset flag when resting at the top
+            self.form_was_bad = False
             
         if lk_ang < 115 and rk_ang < 115 and self.stage == "up":
             self.stage = "down"
@@ -80,7 +78,7 @@ class LateralRaise(Exercise):
                     self.rep_count += 1
             else:
                 self.stage = "down"
-                self.form_was_bad = False # Reset flag when resting at the bottom
+                self.form_was_bad = False
                 
         return self.rep_count, self.stage
 

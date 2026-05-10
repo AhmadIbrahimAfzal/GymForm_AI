@@ -133,7 +133,7 @@ while cap.isOpened():
             'r_knee': calculate_angle(r_hi, r_kn, r_an)
         }
 
-        # Ignore off-screen legs for upper body workouts
+        # zero irrelevant angles
         if current_exercise_name in ["Bicep Curl", "Lateral Raise"]:
             angles_dict['l_hip'] = 180.0
             angles_dict['r_hip'] = 180.0
@@ -173,26 +173,26 @@ while cap.isOpened():
             base_color = (0, 255, 0)
         else:
             text_color = (0, 0, 255)
-            base_color = (0, 255, 0) # normal skeleton
+            base_color = (0, 255, 0)
             
-            # find bad joints
+            # flag bad joints
             if current_exercise_name == "Bicep Curl":
                 if angles_dict['l_shoulder'] > 25 or angles_dict['r_shoulder'] > 25:
-                    bad_connections.update([(11, 13), (12, 14), (11, 23), (12, 24)]) # swinging too much
+                    bad_connections.update([(11, 13), (12, 14), (11, 23), (12, 24)])
                 else:
-                    bad_connections.update([(11, 13), (13, 15), (12, 14), (14, 16)]) # bad arms
+                    bad_connections.update([(11, 13), (13, 15), (12, 14), (14, 16)])
             elif current_exercise_name == "Squat":
                 if angles_dict['l_hip'] < 70 or angles_dict['r_hip'] < 70:
-                    bad_connections.update([(11, 23), (12, 24), (23, 24)]) # leaning forward
+                    bad_connections.update([(11, 23), (12, 24), (23, 24)])
                 elif current_stage == "down" and (angles_dict['l_knee'] > 120 or angles_dict['r_knee'] > 120):
-                    bad_connections.update([(23, 25), (25, 27), (24, 26), (26, 28)]) # weak depth
+                    bad_connections.update([(23, 25), (25, 27), (24, 26), (26, 28)])
                 else:
                     bad_connections.update([(23, 25), (25, 27), (24, 26), (26, 28)])
             elif current_exercise_name == "Lateral Raise":
                 if angles_dict['l_elbow'] < 140 or angles_dict['r_elbow'] < 140:
-                    bad_connections.update([(11, 13), (13, 15), (12, 14), (14, 16)]) # bent elbows
+                    bad_connections.update([(11, 13), (13, 15), (12, 14), (14, 16)])
                 elif angles_dict['l_shoulder'] > 100 or angles_dict['r_shoulder'] > 100:
-                    bad_connections.update([(11, 13), (12, 14), (11, 12)]) # way too high
+                    bad_connections.update([(11, 13), (12, 14), (11, 12)])
                 else:
                      bad_connections.update([(11, 13), (13, 15), (12, 14), (14, 16)])
 
@@ -208,12 +208,12 @@ while cap.isOpened():
         for connection in POSE_CONNECTIONS:
             start_idx, end_idx = connection
             if start_idx < len(filtered_landmarks) and end_idx < len(filtered_landmarks):
-                # Hide irrelevant lines based on exercise
+                # filter by exercise
                 if current_exercise_name in ["Bicep Curl", "Lateral Raise"]:
-                    if start_idx >= 24 or end_idx >= 24: # Hide lower body
+                    if start_idx >= 24 or end_idx >= 24:
                         continue
                 elif current_exercise_name == "Squat":
-                    if (13 <= start_idx <= 22) or (13 <= end_idx <= 22): # Hide arms
+                    if (13 <= start_idx <= 22) or (13 <= end_idx <= 22):
                         continue
 
                 start_point = (int(filtered_landmarks[start_idx][0] * frame.shape[1]), 
@@ -221,7 +221,7 @@ while cap.isOpened():
                 end_point = (int(filtered_landmarks[end_idx][0] * frame.shape[1]), 
                              int(filtered_landmarks[end_idx][1] * frame.shape[0]))
                 
-                # paint bad bones red
+                # bad = red
                 is_bad = (start_idx, end_idx) in bad_connections or (end_idx, start_idx) in bad_connections
                 line_color = (0, 0, 255) if is_bad else base_color
                 thickness = 6 if is_bad else 3
@@ -229,7 +229,7 @@ while cap.isOpened():
                 cv2.line(frame, start_point, end_point, line_color, thickness, cv2.LINE_AA)
 
         for i, flm in enumerate(filtered_landmarks):
-            # Hide irrelevant joints based on exercise
+            # filter joints
             if current_exercise_name in ["Bicep Curl", "Lateral Raise"] and i >= 24:
                 continue
             elif current_exercise_name == "Squat" and (13 <= i <= 22):
@@ -238,7 +238,7 @@ while cap.isOpened():
             x = int(flm[0] * frame.shape[1])
             y = int(flm[1] * frame.shape[0])
             
-            # paint bad joints red
+            # bad = red
             joint_is_bad = any(c[0] == i or c[1] == i for c in bad_connections)
             joint_color = (0, 0, 255) if joint_is_bad else (255, 255, 255)
             

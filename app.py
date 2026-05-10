@@ -190,7 +190,7 @@ class GymCoachProcessor(VideoProcessorBase):
             'r_knee':     calculate_angle(r_hi, r_kn, r_an),
         }
 
-        # Track active arm based on elbow visibility
+        # active arm detection
         l_el_vis = lms[13].visibility if len(lms) > 13 else 0
         r_el_vis = lms[14].visibility if len(lms) > 14 else 0
         ang['active_arm'] = 'left' if l_el_vis > r_el_vis else 'right'
@@ -207,7 +207,7 @@ class GymCoachProcessor(VideoProcessorBase):
         with torch.no_grad():
             out = self.model(tensor)
             
-            # Mask out irrelevant exercises so it never predicts them
+            # mask irrelevant classes
             if ex_name == "Bicep Curl":
                 out[0, 2:] = -float('inf')
             elif ex_name == "Squat":
