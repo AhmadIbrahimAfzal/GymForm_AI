@@ -147,23 +147,38 @@ with open(ROOT / "scaler_params.json") as f:
 scaler_mean = np.array(scaler["mean"], dtype=np.float32)
 scaler_std = np.array(scaler["std"], dtype=np.float32)
 
+UPPER_BODY = ["Bicep Curl", "Lateral Raise", "Shoulder Press", "Tricep Finisher"]
+
 rows = []
 for _ in range(50):
-    angles = [rng.uniform(20, 180) for _ in range(8)]
-    # Normalize angles using the same scaler as training
-    normalized = (np.array(angles, dtype=np.float32) - scaler_mean) / scaler_std
+    raw_angles = [rng.uniform(20, 180) for _ in range(8)]
+    # Standard raw logits (unmasked angles)
+    normalized_raw = (np.array(raw_angles, dtype=np.float32) - scaler_mean) / scaler_std
     with torch.no_grad():
-        logits = model(torch.FloatTensor([normalized]))[0]
+        raw_logits = model(torch.FloatTensor([normalized_raw]))[0]
+
     verdicts = {}
     for ex, (lo, hi) in MASK_RANGES.items():
-        masked = logits.clone()
+        # Mask irrelevant angles to 180 (matching app.py and anglesToInput)
+        ex_angles = list(raw_angles)
+        if ex in UPPER_BODY:
+            ex_angles[4] = ex_angles[5] = ex_angles[6] = ex_angles[7] = 180.0
+        else:
+            ex_angles[0] = ex_angles[1] = ex_angles[2] = ex_angles[3] = 180.0
+
+        normalized_ex = (np.array(ex_angles, dtype=np.float32) - scaler_mean) / scaler_std
+        with torch.no_grad():
+            ex_logits = model(torch.FloatTensor([normalized_ex]))[0]
+
+        masked = ex_logits.clone()
         masked[:lo] = float("-inf")
         masked[hi:] = float("-inf")
         probs = torch.softmax(masked, dim=0)
         idx = int(torch.argmax(probs))
         verdicts[ex] = {"label": LABELS_MAP_REVERSE[idx],
-                        "confidence": float(probs[idx]) * 100.0}
-    rows.append({"angles": angles, "logits": [float(v) for v in logits], "verdicts": verdicts})
+                        "confidence": float(probs[idx]) * 100.0,
+                        "logits": [float(v) for v in ex_logits]}
+    rows.append({"angles": raw_angles, "logits": [float(v) for v in raw_logits], "verdicts": verdicts})
 (OUT / "classifier.json").write_text(json.dumps(rows))
 print(f"  classifier.json: {len(rows)} rows (using GymModelV2 + normalization)")
 
