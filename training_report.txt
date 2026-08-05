@@ -1,0 +1,40 @@
+GymForm AI — Training Report
+============================================================
+Dataset: dataset_augmented.csv
+Total samples: 76960
+Train/Val/Test: 53872/11544/11544
+Architecture: GymModelV2 (12,266 params)
+Best epoch: 118/300
+Test accuracy: 72.0%
+Test loss: 0.7706
+
+Per-Class Report:
+               precision    recall  f1-score   support
+
+     Bad Curl       0.76      0.45      0.56      1154
+    Good Curl       0.75      0.74      0.74      1154
+    Bad Squat       0.70      0.79      0.74      1154
+   Good Squat       0.84      0.71      0.77      1155
+    Bad Raise       0.63      0.68      0.65      1155
+   Good Raise       0.75      0.92      0.83      1155
+ Bad Shoulder       0.86      0.46      0.60      1154
+Good Shoulder       0.72      0.98      0.83      1155
+   Bad Tricep       0.75      0.64      0.69      1154
+  Good Tricep       0.59      0.83      0.69      1154
+
+     accuracy                           0.72     11544
+    macro avg       0.74      0.72      0.71     11544
+ weighted avg       0.74      0.72      0.71     11544
+
+Confusion Matrix:
+                Bad Curl Good Cur Bad Squa Good Squ Bad Rais Good Rai Bad Shou Good Sho Bad Tric Good Tri
+       Bad Curl      516      121       56       19       89       90       39       26       60      138
+      Good Curl        6      857       91       23       75       23        0        0        5       74
+      Bad Squat       26       38      908       41       20       14        0        4       12       91
+     Good Squat       17       44      196      818       35        5        7        4       15       14
+      Bad Raise       32       25       15       56      782      151       18        2       43       31
+     Good Raise        2        1        6        0       50     1067        0        0       13       16
+   Bad Shoulder       51        1        6        8      112       14      534      399       25        4
+  Good Shoulder        1        0        3        0        0        0       20     1131        0        0
+     Bad Tricep       15       22        3        3       48       33        3        0      743      284
+    Good Tricep       16       38       17        7       24       24        0        0       73      955
