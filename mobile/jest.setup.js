@@ -20,7 +20,7 @@ for (const cls of typedArrayClasses) {
       return (
         instance !== null &&
         typeof instance === 'object' &&
-        (instance.constructor.name === cls.name ||
+        ((instance.constructor && instance.constructor.name === cls.name) ||
           Object.prototype.toString.call(instance) === `[object ${cls.name}]`)
       );
     },
